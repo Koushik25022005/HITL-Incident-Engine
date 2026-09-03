@@ -1,109 +1,115 @@
 # HITL-Incident-Engine
 
-A Human-in-the-Loop incident response engine. Alerts come in, an agent proposes
-what to do about them, and nothing state-changing ever runs until a human
-approves it. Every step is logged so the whole flow is auditable after the fact.
+A Human-in-the-Loop incident response engine built on LangGraph. An agent
+proposes what to do about an incident (restart a service, file a retro), but
+nothing state-changing ever executes until a human approves it. The graph's
+checkpointer keeps a full history of every state transition, so the whole
+flow is auditable after the fact.
 
 ## Why
 
 Fully autonomous incident response is risky — an agent that can restart
-services or close tickets on its own can make an incident worse. This project
-keeps a human in the loop for any action with real-world consequences, while
-still automating the tedious parts: normalizing alerts, drafting a diagnosis,
-and recording what happened.
+services or close tickets on its own can make an incident worse. This
+project keeps a human in the loop for any action with real-world
+consequences, using LangGraph's `interrupt_before` mechanism to pause
+execution before anything destructive runs.
 
 ## Project layout
 
 ```
+.github/workflows/
+  ci.yml              # lint + pytest on push/PR
+
 config/
-  settings.yaml / .env.example   # thresholds, API keys, DB path, Slack/webhook tokens
+  settings.py         # model name, API key references, checkpointer DB path
 
 src/
   __init__.py
-  models.py            # Incident, Severity, ApprovalStatus data classes/enums
-  ingestion.py         # normalizes incoming alerts into an Incident object
-  triage.py            # agent/rules logic: reads Incident, proposes diagnosis + action
-  hitl_gate.py         # the approval layer — pauses, asks a human, records the decision
-  actions.py           # the actual remediation functions (restart_service, notify, etc.)
-  audit.py             # append-only log of every step (who decided what, when)
-  db.py                # persistence layer (sqlite/postgres) for incidents + approvals
-  main.py / cli.py     # entrypoint that wires everything together
-  interfaces/
-    slack_bot.py        # or api.py / cli_interface.py — however humans interact with it
+  state.py            # AgentState schema + custom message reducer
+  nodes.py            # tools + node functions (call_model, exists_action, take_action)
+  graph.py            # StateGraph assembly, compile(checkpointer=..., interrupt_before=["action"])
 
 tests/
-  test_ingestion.py
-  test_triage.py
-  test_hitl_gate.py
-  test_actions.py
+  __init__.py
+  test_graph.py       # routing logic + interrupt behavior
 
-.github/workflows/
-  ci.yml               # lint + pytest on push/PR
+app.py                # entrypoint: thread loop, streaming, approval prompt
+requirements.txt
+.env                  # OPENAI_API_KEY, etc. (not committed)
 ```
 
 ## Workflow
 
-The pipeline runs in a fixed order, and only one file (`hitl_gate.py`) is
-allowed to unlock execution.
+The pipeline is a LangGraph graph with two nodes, `llm` and `action`, and a
+single compile-time setting that enforces the human checkpoint.
 
-1. **Ingestion** (`ingestion.py`)
-   Receives a raw alert — from a webhook, CLI arg, or test fixture — and
-   converts it into a standard `Incident` object (id, title, severity,
-   service, timestamp, status = `new`). This is the only place that deals
-   with messy external input.
+1. **State** (`src/state.py`)
+   Defines `AgentState`: a `messages` list (using a custom reducer that
+   *replaces* a message when a human edits it, rather than duplicating it),
+   plus `incident_id` and `status` for tracking the incident's lifecycle.
 
-2. **Triage** (`triage.py`)
-   Takes the `Incident` and decides what *should* happen, e.g. "restart
-   order-worker" or "escalate to on-call." This stage only **proposes** —
-   it never executes. Output: an `ActionProposal` (action name, target,
-   reasoning, confidence score).
+2. **LLM node** (`src/nodes.py::make_call_model`)
+   Takes the current state, prepends the system prompt, and invokes the
+   model with tools bound (`lookup_service`, `restart_service`,
+   `file_incident_retro`). The model's response — plain text or a proposed
+   tool call — is appended to `messages`.
 
-3. **HITL gate** (`hitl_gate.py`)
-   The core of the project. It:
-   - Writes a pending approval record via `db.py`.
-   - Surfaces the proposal to a human through whichever `interfaces/`
-     module is active (Slack message, CLI prompt, API endpoint returning
-     `pending`).
-   - Blocks or polls until the human approves, edits, or rejects.
-   - Returns a final `ApprovedAction` or `RejectedAction`.
+3. **Routing** (`src/nodes.py::exists_action`)
+   Checks whether the last message contains a tool call. If so, the graph
+   routes to the `action` node; if not, the graph ends.
 
-4. **Actions** (`actions.py`)
-   Runs only once `hitl_gate.py` returns an `ApprovedAction`. Each function
-   here is a discrete, auditable operation (`restart_service(name)`,
-   `file_ticket(summary)`, etc.), ideally with a dry-run mode.
+4. **HITL gate** (`src/graph.py`)
+   The graph is compiled with:
+   ```python
+   app = graph.compile(checkpointer=checkpointer, interrupt_before=["action"])
+   ```
+   This is the entire approval mechanism — execution always pauses
+   immediately before the `action` node runs, regardless of what the
+   proposed tool call is. No action reaches `take_action` without this
+   pause happening first.
 
-5. **Audit** (`audit.py`)
-   Called at every transition — ingested → triaged → pending approval →
-   approved/rejected → executed — and writes an immutable record. This is
-   what makes the system audit-worthy rather than just an agent script.
+5. **Action node** (`src/nodes.py::take_action`)
+   Only reached after the graph resumes past the interrupt. Executes the
+   proposed tool call(s) and appends the results as `ToolMessage`s.
 
-6. **Persistence** (`db.py`)
-   Backs both the incident store and the approvals table. Kept thin (CRUD
-   only) so `hitl_gate.py` and `audit.py` don't duplicate storage logic.
+6. **Checkpointer / persistence** (`config/settings.py` + `src/graph.py`)
+   A `SqliteSaver` (or equivalent) backs the graph, keyed by `thread_id`.
+   This is what allows an incident to sit "pending approval" indefinitely
+   and be resumed later, potentially from a different process.
 
-7. **Entrypoint** (`main.py` / `cli.py`)
-   The only file that imports everything and wires the pipeline:
-   `ingest → triage → hitl_gate → actions → audit`, in that order, catching
-   exceptions at each stage so a failure doesn't silently skip the human
-   check.
+7. **Approval loop** (`app.py`)
+   The entrypoint runs the graph for a given thread, then loops:
+   ```python
+   while app.get_state(thread).next:
+       decision = input("proceed? ")
+       if decision != "y":
+           break
+       for event in app.stream(None, thread):
+           ...
+   ```
+   A human can also inspect (`get_state`) and edit (`update_state`) the
+   proposed tool call before approving it — e.g. correcting a service name
+   — before resuming the stream.
 
-8. **Interfaces** (`interfaces/`)
-   Decoupled from core pipeline logic — they call `hitl_gate`'s public
-   functions (`get_pending_approvals()`, `submit_decision(id, approve/reject)`)
-   so you can swap Slack for a web dashboard later without touching the
-   pipeline.
+8. **Audit trail**
+   `app.get_state_history(thread)` returns every state snapshot for an
+   incident, in order — ingestion, triage, pause, approval/edit, execution.
+   No separate audit log is needed; this comes from the checkpointer for
+   free and can be surfaced via a CLI command or API endpoint.
 
 9. **CI** (`.github/workflows/ci.yml`)
-   Runs `pytest tests/` plus a linter on every push. The HITL gate logic
-   especially should stay well tested — a bug there is the one failure mode
-   this whole project exists to prevent.
+   Runs `pytest tests/` on every push. `tests/test_graph.py` should cover
+   `exists_action`'s routing and confirm that the compiled graph actually
+   halts at `interrupt_before=["action"]` before any tool executes.
 
 ## Design rule
 
-Nothing in `actions.py` should ever be callable directly from `triage.py`.
-The only path to execution runs through `hitl_gate.py`. That boundary is the
-whole point of the project.
+No tool call in `take_action` should ever run without the graph first
+pausing at the `interrupt_before` boundary. That pause is the entire point
+of the project — it's what turns an autonomous agent into a human-approved
+one.
 
 ## Status
 
-Early scaffold — core modules and pipeline wiring not yet implemented.
+Core scaffold in place (`state.py`, `nodes.py`); `graph.py`, `app.py`, and
+tests are the next pieces to fill in.
