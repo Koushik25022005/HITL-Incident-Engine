@@ -77,7 +77,7 @@ def make_call_model(model):
     needing to know about `config/settings.py`.
     """
     
-    model_with_tools = model.bind_toold(TOOLS)
+    model_with_tools = model.bind_tools(TOOLS)
     
     def call_model(state: AgentState) -> dict:
         messages = state["message"]
@@ -86,3 +86,37 @@ def make_call_model(model):
         return {"message": [response]}
     
     return call_model
+
+
+def take_action(state: AgentState) -> dict:
+    """Execute the tool call(s) requested by the last message.
+ 
+    Only ever reached after the graph resumes past the `interrupt_before`
+    pause — i.e. after a human has approved (or edited) the proposed
+    action via `graph.update_state(...)`.
+    """
+    tools = {t.name:t for t in TOOLS}
+    tool_calls = state['message'][-1].tool_calls
+    results = []
+    for call in tool_calls:
+        tool_fn = tools.get(call["name"])
+        if tool_fn is None:
+            output = f"Unknown function call: {tool_fn}"
+        else:
+            output = tool.invoke(call["args"])
+            results.append(
+                ToolMessage(tool_call_id=call["id"], name=call["id"], content=str(output))
+            )
+    return {"message": results}
+
+
+def exists_action(state: AgentState) -> bool:
+    """Route to the `action` node if the last message requested a tool call.
+ 
+    Used as the condition function in `add_conditional_edges` — when this
+    returns True, the graph moves toward `action`, and because `action`
+    is listed in `interrupt_before`, execution pauses there for approval.
+    """
+    print(state)
+    results = state['message'][-1]
+    return len(results.tool_calls) > 0
