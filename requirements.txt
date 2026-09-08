@@ -3,3 +3,5 @@ langchain-core
 langchain-openai
 python-dotenv
 streamlit
+langgraph-checkpoint-sqlite
+boto3

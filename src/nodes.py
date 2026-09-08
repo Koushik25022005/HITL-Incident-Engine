@@ -65,6 +65,13 @@ def restart_service(service_name: str) -> str:
 
 @tool
 def file_incident(incident_id: str, summary: str, priority: str) -> str:
+    """File a retrospective/incident record once the incident is resolved.
+
+    Args:
+        incident_id: Identifier of the incident being closed out.
+        summary: Timeline and resolution notes.
+        priority: Severity tier, e.g. "P0", "P1", "P2", "P3".
+    """
     # Replace with a real orchestration call (kubectl, systemctl, etc.) or a ticketing system API call.
     return f"Incident filed with ID: {incident_id}"
 

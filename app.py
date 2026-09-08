@@ -15,9 +15,9 @@ Responsibilities:
 Run with:
     streamlit run app.py
 """
-
+import ast
 import uuid
-
+import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver # type: ignore
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage # type: ignore
 
@@ -38,7 +38,8 @@ st.set_page_config(page_title="HITL Incident Engine", layout="wide")
 @st.cache_resource
 def get_app():
     model = build_model()
-    checkpointer= SqliteSaver.from_conn_string(CHECKPOINT_DB_PATH)
+    conn = sqlite3.connect(CHECKPOINT_DB_PATH, check_same_thread=False)
+    checkpointer=SqliteSaver(conn)
     return build_graph(model, checkpointer=checkpointer)
 
 
@@ -63,10 +64,10 @@ def start_new_incident(description: str):
     st.session_state.thread_id = thread_id
     st.session_state.incident_id = incident_id
     
-    thread = {"configurable": {"thrad_id": thread_id}}
+    thread = {"configurable": {"thread_id": thread_id}}
     initial_state = {
-        "messages": [HumanMessage(content=description)],
-        "incident": incident_id,
+        "message": [HumanMessage(content=description)],
+        "incident_id": incident_id,
         "status": "new"
     }
     
@@ -88,9 +89,9 @@ with st.sidebar:
         start_new_incident(description)
         st.rerun()
         
-        st.divider()
-        st.caption(f"Current Thread: `{st.session_state.thread_id or '-'}`")
-        st.caption(f"Incident ID: `{st.session_state.incident_id or '-'}`")
+st.divider()
+st.caption(f"Current Thread: `{st.session_state.thread_id or '-'}`")
+st.caption(f"Incident ID: `{st.session_state.incident_id or '-'}`")
         
 # ---------------------------------------------------------------------------
 # Main panel
@@ -107,7 +108,7 @@ state = graph.get_state(thread)
  
 # --- Conversation so far -----------------------------------------------
 st.subheader("Conversation")
-for msg in state.values.get("messages", []):
+for msg in state.values.get("message", []):
     if isinstance(msg, HumanMessage):
         with st.chat_message("user"):
             st.write(msg.content)
@@ -117,7 +118,12 @@ for msg in state.values.get("messages", []):
             if msg.content:
                 st.write(msg.content)
             for call in getattr(msg, "tool_calls", []):
-                st.caption(f"Proposed tool call: `{call['name']}` - ``{call['args']}")
+                st.caption(f"Proposed tool call: `{call['name']}` - `{call['args']}`")
+    
+    elif isinstance(msg, ToolMessage):
+        with st.chat_message("assistant"):
+            st.caption(f"Tool result ({msg.name}): {msg.content}")
+        
 
 # --- Approval gate --------------------------------------------------------
 # `state.next` is non-empty only when the graph is paused — i.e. it's about
@@ -131,7 +137,13 @@ if state.next:
     for call in tool_calls:
         st.warning(f"Agent wants to call **`{call['name']}`** with **`{call['args']}`**")
         
-    cal1, col2, col3 = st.columns(3)
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("Approve", type="primary"):
+            for _ in graph.stream(None, thread):
+                pass
+            st.rerun()
     
     with col2:
         with st.popover("Edit Arguments"):
@@ -145,14 +157,15 @@ if state.next:
                 
                 if st.button("Save edit and approve"):
                     edited_message = last_message.model_copy(deep=True)
-                    edited_message.tool_calls[0]["args"] = eval(new_args_raw)
+                    edited_message.tool_calls[0]["args"] = ast.literal_eval(new_args_raw)
                     
                     
-                    graph.update_state(thread, {"messages": [edited_message]})
+                    graph.update_state(thread, {"message": [edited_message]})
                     for _ in graph.stream(None, thread):
                         pass
+                    st.rerun()
         
-        with col3:
+    with col3:
             if st.button("Reject"):
                 rejection = ToolMessage(
                     tool_call_id=tool_calls[0]["id"] if tool_calls else "n/a",
@@ -167,8 +180,8 @@ if state.next:
 with st.expander("Audit trail (full state history)"):
     for snapshot in graph.get_state_history(thread):
         st.text(
-            f"step={snapshot.metadata.get('step')}"
-            f"next={snapshot.next}"
-            f"messages=[len(snapshot.values.get_message('messages', []))]"
+            f"step={snapshot.metadata.get('step')} "
+            f"next={snapshot.next} "
+            f"message={len(snapshot.values.get('message', []))}"
         )
     
