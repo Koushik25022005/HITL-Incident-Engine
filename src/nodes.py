@@ -11,13 +11,16 @@ Replace the placeholder tool implementations (`lookup_service`,
 infrastructure/ticketing systems when you're ready — the node
 functions below don't need to change when you do."""
     
-    
+import boto3 # type: ignore
+
+   
 from langchain_core.messages import SystemMessage, ToolMessage # type: ignore
 from langchain_core.tools import tool # type: ignore
 from langchain_openai import ChatOpenAI # type: ignore
 from pydantic import SecretStr
 import os
 from config.settings import(
+    AWS_REGION,
     OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL,
     MODEL_NAME,
@@ -26,6 +29,8 @@ from config.settings import(
 )
 
 from src.state import AgentState
+
+ec2_client = boto3.client("ec2", region_name=AWS_REGION)
 
 # ---------------------------------------------------------------------------
 # Tools

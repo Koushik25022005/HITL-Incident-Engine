@@ -5,3 +5,4 @@ python-dotenv
 streamlit
 langgraph-checkpoint-sqlite
 boto3
+pytest
