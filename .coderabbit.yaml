@@ -1,0 +1,32 @@
+# .coderabbit.yaml
+language: "en"
+
+reviews:
+  # The "chill" profile ensures the bot focuses on bugs, security, and runtime errors, 
+  # rather than cluttering PRs with stylistic suggestions.
+  profile: "chill" 
+  
+  auto_review:
+    enabled: true
+    drafts: false # Skip work-in-progress or draft PRs
+  
+  # This restricts CodeRabbit so it ONLY looks at files within the src/ directory.
+  path_filters:
+    - "src/**"
+    - "!dist/**"
+    - "!*.min.js"
+
+  # (New addition) Gives the AI specific instructions for your src directory
+  path_instructions:
+    - path: "src/**"
+      instructions: |
+        Focus strictly on identifying code errors, logic flaws, runtime failures, and bugs. 
+        Ignore minor stylistic choices and formatting.
+
+chat:
+  enabled: true # Allows you to converse with the bot in PR comments
+
+# Extra features
+request_changes_workflow: false
+in_progress_fortune: true # Post a progress message while running
+poem: false # Toggle a poem summary in the walkthrough
