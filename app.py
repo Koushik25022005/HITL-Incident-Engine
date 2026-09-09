@@ -18,8 +18,10 @@ Run with:
 import ast
 import uuid
 import sqlite3
+from typing import Any
 from langgraph.checkpoint.sqlite import SqliteSaver # type: ignore
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage # type: ignore
+from langchain_core.runnables.config import RunnableConfig
 
 
 from config.settings import CHECKPOINT_DB_PATH
@@ -64,8 +66,8 @@ def start_new_incident(description: str):
     st.session_state.thread_id = thread_id
     st.session_state.incident_id = incident_id
     
-    thread = {"configurable": {"thread_id": thread_id}}
-    initial_state = {
+    thread: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    initial_state: Any = {
         "message": [HumanMessage(content=description)],
         "incident_id": incident_id,
         "status": "new"
@@ -103,7 +105,7 @@ if not st.session_state.thread_id:
     st.info("Start a new incident from the sidebar to begin.")
     st.stop()
     
-thread = {"configurable": {"thread_id": st.session_state.thread_id}}
+thread: RunnableConfig = {"configurable": {"thread_id": st.session_state.thread_id}}
 state = graph.get_state(thread)
  
 # --- Conversation so far -----------------------------------------------
@@ -180,7 +182,7 @@ if state.next:
 with st.expander("Audit trail (full state history)"):
     for snapshot in graph.get_state_history(thread):
         st.text(
-            f"step={snapshot.metadata.get('step')} "
+            f"step={(snapshot.metadata or {}).get('step') or {}} "
             f"next={snapshot.next} "
             f"message={len(snapshot.values.get('message', []))}"
         )

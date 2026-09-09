@@ -15,7 +15,8 @@ functions below don't need to change when you do."""
 from langchain_core.messages import SystemMessage, ToolMessage # type: ignore
 from langchain_core.tools import tool # type: ignore
 from langchain_openai import ChatOpenAI # type: ignore
-
+from pydantic import SecretStr
+import os
 from config.settings import(
     OPENROUTER_API_KEY,
     OPENROUTER_BASE_URL,
@@ -86,7 +87,7 @@ before it is executed. Before recommending the restart, look up service informat
 def build_model() -> ChatOpenAI:
     return ChatOpenAI(
         model=MODEL_NAME,
-        api_key=OPENROUTER_API_KEY,
+        api_key=SecretStr(OPENROUTER_API_KEY) if OPENROUTER_API_KEY else None,
         base_url=OPENROUTER_BASE_URL,
         default_headers={
             "HTTP-Refferer": APP_REFFERER,
@@ -124,14 +125,14 @@ def take_action(state: AgentState) -> dict:
     action via `graph.update_state(...)`.
     """
     tools = {t.name:t for t in TOOLS}
-    tool_calls = state['message'][-1].tool_calls
+    tool_calls = getattr(state['message'][-1], "tool_calls", [])
     results = []
     for call in tool_calls:
         tool_fn = tools.get(call["name"])
         if tool_fn is None:
             output = f"Unknown function call: {tool_fn}"
         else:
-            output = call.invoke(call["args"])
+            output = tool_fn.invoke(call["args"])
         results.append(
                 ToolMessage(tool_call_id=call["id"], name=call["id"], content=str(output))
             )
@@ -145,5 +146,5 @@ def exists_action(state: AgentState) -> bool:
     returns True, the graph moves toward `action`, and because `action`
     is listed in `interrupt_before`, execution pauses there for approval.
     """
-    results = state['message'][-1]
-    return len(results.tool_calls) > 0
+    last_message = state['message'][-1]
+    return len(getattr(last_message, "tool_calls", [])) > 0

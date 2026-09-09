@@ -15,7 +15,7 @@ exist in that region.
 
 import sys
 
-import boto3
+import boto3 # type: ignore
 from dotenv import load_dotenv
 
 load_dotenv()
