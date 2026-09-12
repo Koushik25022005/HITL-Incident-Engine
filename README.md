@@ -52,10 +52,6 @@ flowchart TD
     GATE -.->|human rejects<br/>stream never resumed| STOP(["Thread stays paused<br/>(no graph edge)"])
     Action -->|tool result returned| LLM
 
-    style GATE fill:#4a2e00,stroke:#ffb300,stroke-width:2px
-    style STOP fill:#3a1010,stroke:#c62828,stroke-dasharray: 5 5
-    style Action fill:#1a3a1a,stroke:#4caf50
-    style LLM fill:#1a1a3a,stroke:#5c6bc0
 ```
 
 The gate isn't a real LangGraph node — it represents where
