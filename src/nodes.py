@@ -98,7 +98,7 @@ def file_postmortem(incident_id: str, summary: str, priority: str) -> str:
 TOOLS = [lookup_server, reboot_instances, file_postmortem]
 
 system_prompt = """You are an incident commander. Use the availoabel tools to investigate and remediate production
-Only propose one action at a time when the action is indestructive (e.g. restarting a service) - a human will review it
+Only propose one action at a time when the action is destructive (e.g. restarting a service) - a human will review it
 before it is executed. Before recommending the restart, look up service information. Once the incident is resolved, file a retrospective."""
 # ---------------- Build Model -------------------
 

@@ -132,7 +132,7 @@ for msg in state.values.get("message", []):
 # to run a node in `interrupt_before` (our "action" node) and is waiting.
 
 if state.next:
-    st.subheader("Pending Aprroval.......")
+    st.subheader("Pending Approval.......")
     last_message = state.values["message"][-1]
     tool_calls = getattr(last_message, "tool_calls", [])
     

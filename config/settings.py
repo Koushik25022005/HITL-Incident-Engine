@@ -8,7 +8,7 @@ load_dotenv()
 OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
-MODEL_NAME = os.environ.get("MODEL_NAME", "nvidia/nemotron-3-super-120b-a12b:free")
+MODEL_NAME = os.environ.get("MODEL_NAME", "openrouter/free")
 
 APP_REFFERER = os.environ.get("APP_REFFERER", "")
 APP_TITLE = os.environ.get("APP_TITLE", "HITL_Incident-Engine")
