@@ -42,47 +42,60 @@ ec2_client = boto3.client("ec2", region_name=AWS_REGION)
 # ---------------------------------------------------------------------------
 
 @tool
-def lookup_service(service_name: str) -> dict:
-    """Return known info (region, replica count, runbook) for a service.
+def lookup_server(instance_id: str) -> dict:
+    """Look up current status and metadata for an EC2 instance.
+ 
+    Read-only — safe to call without human approval.
  
     Args:
-        service_name: Logical service name, e.g. "api-gateway".
+        instance_id: The EC2 instance ID, e.g. "i-0abcd1234efgh5678".
     """
-    catalog = {
-        "api-gateway": {"region": "us-west-2", "replica_count": 12, "runbook": "rb/api-gateway"},
-        "order-worker": {"region": "us-west-2", "replica_count": 6, "runbook": "rb/order-worker"},
-        "user-profile": {"region": "us-west-2", "replica_count": 4, "runbook": "rb/user-profile"}
+    try: 
+        response = ec2_client.describe_instances(InstanceIds=[instance_id])
+    except ec2_client.exceptions.ClientError as e:
+        return {"error": str(e)}
+    
+    reservations = response.get("Reservations", [])
+    if not reservations or not reservations[0]["Instances"]:
+        return {"error": f"Instance not found: {instance_id}"}
+    
+    instance = reservations[0]["Instances"][0]
+    return {
+        "instance_id": instance_id, 
+        "state": instance["State"]["Name"],
+        "instance_type": instance["InstanceType"],
+        "availability_zone": instance["Placement"]["AvailabilityZone"],
+        "launch_time": str(instance["LaunchTime"])
     }
-    svc = catalog.get(service_name)
-    if not svc:
-        raise ValueError(f"Service not found: {service_name}")
-    return svc
-
 
 @tool
-def restart_service(service_name: str) -> str:
-    """Restart a production service. Destructive — must go through the HITL gate.
+def reboot_instances(instance_id: str) -> str:
+    """Reboot a production EC2 instance. Destructive — must go through the HITL gate.
  
     Args:
-        service_name: Logical service name to restart.
+        instance_id: The EC2 instance ID to reboot.
     """
-    return f"Restarted '{service_name}' restarted successfully."
+    try:
+        ec2_client.reboot_instances(instanceIds=[instance_id])
+    except ec2_client.exceptions.ClientError as e:
+        return f"Reboot failed: {e}"
+    return f"Reboot request sent for instance '{instance_id}'"
 
 
 @tool
-def file_incident(incident_id: str, summary: str, priority: str) -> str:
-    """File a retrospective/incident record once the incident is resolved.
-
+def file_postmortem(incident_id: str, summary: str, priority: str) -> str:
+    """File a postmortem/retrospective record once the incident is resolved.
+ 
     Args:
         incident_id: Identifier of the incident being closed out.
         summary: Timeline and resolution notes.
         priority: Severity tier, e.g. "P0", "P1", "P2", "P3".
     """
     # Replace with a real orchestration call (kubectl, systemctl, etc.) or a ticketing system API call.
-    return f"Incident filed with ID: {incident_id}"
+    return f"Incident filed with ID: {incident_id} (priority={priority}): {summary}"
 
 
-TOOLS = [lookup_service, restart_service, file_incident]
+TOOLS = [lookup_server, reboot_instances, file_postmortem]
 
 system_prompt = """You are an incident commander. Use the availoabel tools to investigate and remediate production
 Only propose one action at a time when the action is indestructive (e.g. restarting a service) - a human will review it
@@ -139,7 +152,7 @@ def take_action(state: AgentState) -> dict:
         else:
             output = tool_fn.invoke(call["args"])
         results.append(
-                ToolMessage(tool_call_id=call["id"], name=call["id"], content=str(output))
+                ToolMessage(tool_call_id=call["id"], name=call["name"], content=str(output))
             )
     return {"message": results}
 

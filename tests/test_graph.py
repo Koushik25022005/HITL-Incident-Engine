@@ -44,12 +44,12 @@ def test_exists_action_true_when_tool_call_present():
     )
     
     state = {"message": [HumanMessage(content="hi"), ai_message]}
-    assert exists_action(cast(Any, state)) is True
+    assert exists_action(cast(AgentState, state)) is True
     
 def test_exists_action_false_when_tool_call_present():
     ai_message = AIMessage(content="No action needed, all clear.")
     state = {"message": [HumanMessage(content="hi"), ai_message]}
-    assert exists_action(cast(Any, state)) is False
+    assert exists_action(cast(AgentState, state)) is False
     
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def test_take_action_executes_known_tool(monkeypatch):
     assert isinstance(tool_message, ToolMessage)
     assert tool_message.tool_call_id == "call_1"
     assert tool_message.name == "dummy_tool"
-    assert "echo:hello" in tool_message.content
+    assert "echo: hello" in tool_message.content
     
 def test_take_action_handles_unknown_tool(monkeypatch):
     monkeypatch.setattr(node_module, "TOOLS", dummy_tool)
@@ -95,7 +95,7 @@ def test_take_action_handles_unknown_tool(monkeypatch):
     
     state = {"message": [ai_message]}
     
-    result = take_action(cast(Any, state))
+    result = take_action(cast(AgentState, state))
     
     tool_message = result["message"][0]
     assert isinstance(tool_message, ToolMessage)
@@ -181,4 +181,4 @@ def test_graph_executes_action_after_resume(monkeypatch):
  
     assert any(isinstance(m, ToolMessage) for m in messages)
     tool_result = next(m for m in messages if isinstance(m, ToolMessage))
-    assert "echo:restart" in tool_result.content
+    assert "echo: restart" in tool_result.content
