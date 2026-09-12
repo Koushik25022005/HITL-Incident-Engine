@@ -43,6 +43,28 @@ requirements.txt
 The pipeline is a LangGraph graph with two nodes, `llm` and `action`, and a
 single compile-time setting that enforces the human checkpoint.
 
+```mermaid
+flowchart TD
+    Start([Start]) -->|User Query| LLM[LLM<br/>call_model]
+    LLM -->|no tool call needed| END([END])
+    LLM -->|tool call proposed| GATE{{"⏸ HITL Gate<br/>interrupt_before"}}
+    GATE -->|human approves / edits| Action[Action<br/>take_action]
+    GATE -.->|human rejects<br/>stream never resumed| STOP(["Thread stays paused<br/>(no graph edge)"])
+    Action -->|tool result returned| LLM
+
+    style GATE fill:#4a2e00,stroke:#ffb300,stroke-width:2px
+    style STOP fill:#3a1010,stroke:#c62828,stroke-dasharray: 5 5
+    style Action fill:#1a3a1a,stroke:#4caf50
+    style LLM fill:#1a1a3a,stroke:#5c6bc0
+```
+
+The gate isn't a real LangGraph node — it represents where
+`interrupt_before=["action"]` pauses execution between `call_model`'s
+routing decision and `action` actually running. Rejection is shown as a
+dashed line because it isn't a graph edge either: the "Reject" button in
+`app.py` writes a synthetic `ToolMessage` via `update_state` and simply
+never resumes the stream, so the thread just stays paused.
+
 1. **State** (`src/state.py`)
    Defines `AgentState`: a `messages` list (using a custom reducer that
    *replaces* a message when a human edits it, rather than duplicating it),
