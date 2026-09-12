@@ -52,9 +52,9 @@ flowchart TD
     GATE -.->|human rejects<br/>stream never resumed| STOP(["Thread stays paused<br/>(no graph edge)"])
     Action -->|tool result returned| LLM
 
-    style A fill:#f9f,stroke:#333,stroke-width:2px
-    style B fill:#bbf,stroke:#f66,stroke-width:2px,color:#fff
-    style C fill:#bfb,stroke:#333,stroke-dasharray: 5 5
+    style LLM fill:#f9f,stroke:#333,stroke-width:2px
+    style Action fill:#bbf,stroke:#f66,stroke-width:2px,color:#fff
+    style GATE fill:#bfb,stroke:#333,stroke-dasharray: 5 5
 
 ```
 
