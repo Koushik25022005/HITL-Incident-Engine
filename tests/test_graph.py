@@ -23,6 +23,7 @@ from typing import Any, cast
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
 from src.state import AgentState
@@ -83,3 +84,101 @@ def test_take_action_executes_known_tool(monkeypatch):
     assert tool_message.tool_call_id == "call_1"
     assert tool_message.name == "dummy_tool"
     assert "echo:hello" in tool_message.content
+    
+def test_take_action_handles_unknown_tool(monkeypatch):
+    monkeypatch.setattr(node_module, "TOOLS", dummy_tool)
+    
+    ai_message = AIMessage(
+        content="",
+        tool_calls=[{"name": "dummy_tool", "args": {"value": "hello"}, "id": "call_1"}]
+    )
+    
+    state = {"message": [ai_message]}
+    
+    result = take_action(cast(Any, state))
+    
+    tool_message = result["message"][0]
+    assert isinstance(tool_message, ToolMessage)
+    assert "unknown tool" in str(tool_message.content).lower()
+    
+    
+# ---------------------------------------------------------------------------
+# End-to-end: the graph actually pauses before `action`
+# ---------------------------------------------------------------------------
+ 
+ 
+class FakeModel:
+    """Stand-in for ChatOpenAI. bind_tools returns self; invoke always
+    proposes the same tool call, regardless of input, so the test is
+    deterministic without touching a real LLM.
+    """
+ 
+    def bind_tools(self, tools):
+        return self
+ 
+    def invoke(self, messages):
+        return AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "dummy_tool", "args": {"value": "restart"}, "id": "call_1"}
+            ],
+        )
+ 
+ 
+def test_graph_pauses_before_action(monkeypatch):
+    monkeypatch.setattr(node_module, "TOOLS", [dummy_tool])
+ 
+    fake_model = FakeModel()
+    checkpointer = InMemorySaver()
+    graph = build_graph(fake_model, checkpointer=checkpointer)
+ 
+    thread = {"configurable": {"thread_id": "test-thread-1"}}
+    initial_state = {
+        "message": [HumanMessage(content="api-gateway is down")],
+        "incident_id": "INC-test",
+        "status": "new",
+    }
+ 
+    for _ in graph.stream(cast(AgentState, initial_state), cast(RunnableConfig, thread)):
+        pass
+ 
+    state = graph.get_state(cast(RunnableConfig, thread))
+ 
+    # The graph must be paused, waiting on the "action" node — this is
+    # the entire point of interrupt_before=["action"]. If this fails,
+    # the HITL gate is not actually enforcing a human checkpoint.
+    assert state.next == ("action",)
+ 
+    # And the proposed action must not have executed yet — no
+    # ToolMessage should exist in the conversation until a human
+    # resumes the stream.
+    assert not any(isinstance(m, ToolMessage) for m in state.values["message"])
+ 
+ 
+def test_graph_executes_action_after_resume(monkeypatch):
+    monkeypatch.setattr(node_module, "TOOLS", [dummy_tool])
+ 
+    fake_model = FakeModel()
+    checkpointer = InMemorySaver()
+    graph = build_graph(fake_model, checkpointer=checkpointer)
+ 
+    thread = {"configurable": {"thread_id": "test-thread-2"}}
+    initial_state = {
+        "message": [HumanMessage(content="api-gateway is down")],
+        "incident_id": "INC-test-2",
+        "status": "new",
+    }
+ 
+    for _ in graph.stream(cast(AgentState, initial_state), cast(RunnableConfig, thread)):
+        pass
+ 
+    # Simulate a human clicking "Approve": resume with no new input.
+    for _ in graph.stream(None, cast(RunnableConfig, thread)):
+        pass
+ 
+    state = graph.get_state(cast(RunnableConfig, thread))
+    messages = state.values["message"]
+ 
+    assert any(isinstance(m, ToolMessage) for m in messages)
+    tool_result = next(m for m in messages if isinstance(m, ToolMessage))
+    assert "echo:restart" in tool_result.content
