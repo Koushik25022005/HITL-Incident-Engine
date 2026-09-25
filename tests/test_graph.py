@@ -83,11 +83,11 @@ def test_take_action_executes_known_tool(monkeypatch):
     assert "echo: hello" in tool_message.content
     
 def test_take_action_handles_unknown_tool(monkeypatch):
-    monkeypatch.setattr(node_module, "TOOLS", dummy_tool)
+    monkeypatch.setattr(node_module, "TOOLS", [dummy_tool])
     
     ai_message = AIMessage(
         content="",
-        tool_calls=[{"name": "dummy_tool", "args": {"value": "hello"}, "id": "call_1"}]
+        tool_calls=[{"name": "nonexistent_tool", "args": {"value": "hello"}, "id": "call_1"}]
     )
     
     state = {"message": [ai_message]}
@@ -96,7 +96,7 @@ def test_take_action_handles_unknown_tool(monkeypatch):
     
     tool_message = result["message"][0]
     assert isinstance(tool_message, ToolMessage)
-    assert "unknown tool" in str(tool_message.content).lower()
+    assert "unknown function call" in str(tool_message.content).lower()
     
     
 # ---------------------------------------------------------------------------
