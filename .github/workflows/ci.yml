@@ -32,10 +32,10 @@
 
       - name: Run tests
         env:
-          OPENROUTER_API_KEY: ""
+          OPENROUTER_API_KEY: "test-key-not-real"
           MODEL_NAME: "openai/gpt-40-mini"
-          AWS_ACCESS_KEY_ID: ""
-          AWS_SECRET_ACCESS_KEY: ""
-          AWS_REGION: ""
+          AWS_ACCESS_KEY_ID: "test-acess-key"
+          AWS_SECRET_ACCESS_KEY: "test-secret-key"
+          AWS_REGION: "us-west-2"
           CHECKPOINT_DB_PATH: ":memory:"
         run: pytest tests/ -v
