@@ -1,0 +1,16 @@
+[tool.ruff]
+line-length = 100
+exclude = [
+    "lgenv",
+    "template.py",
+    "setup.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "SIM"]
+ignore = [
+    "BLE001",  # blind `except Exception` is fine in diagnostic/connectivity scripts
+]
+
+[tool.ruff.lint.per-file-ignores]
+"test_aws_conn.py" = ["BLE001"]

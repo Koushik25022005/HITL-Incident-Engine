@@ -11,23 +11,21 @@ Replace the placeholder tool implementations (`lookup_service`,
 infrastructure/ticketing systems when you're ready — the node
 functions below don't need to change when you do."""
     
-import boto3 # type: ignore
 
-   
-from langchain_core.messages import SystemMessage, ToolMessage # type: ignore
-from langchain_core.tools import tool # type: ignore
-from langchain_openai import ChatOpenAI # type: ignore
+import boto3  # type: ignore
+from langchain_core.messages import SystemMessage, ToolMessage  # type: ignore
+from langchain_core.tools import tool  # type: ignore
+from langchain_openai import ChatOpenAI  # type: ignore
 from pydantic import SecretStr
-import os
-from config.settings import(
-    AWS_REGION,
-    OPENROUTER_API_KEY,
-    OPENROUTER_BASE_URL,
-    MODEL_NAME,
+
+from config.settings import (
     APP_REFFERER,
     APP_TITLE,
+    AWS_REGION,
+    MODEL_NAME,
+    OPENROUTER_API_KEY,
+    OPENROUTER_BASE_URL,
 )
-
 from src.state import AgentState
 
 ec2_client = boto3.client("ec2", region_name=AWS_REGION)
@@ -91,15 +89,18 @@ def file_postmortem(incident_id: str, summary: str, priority: str) -> str:
         summary: Timeline and resolution notes.
         priority: Severity tier, e.g. "P0", "P1", "P2", "P3".
     """
-    # Replace with a real orchestration call (kubectl, systemctl, etc.) or a ticketing system API call.
+    # Replace with a real orchestration call (kubectl, systemctl, etc.) 
+    # or a ticketing system API call.
     return f"Incident filed with ID: {incident_id} (priority={priority}): {summary}"
 
 
 TOOLS = [lookup_server, reboot_instances, file_postmortem]
 
-system_prompt = """You are an incident commander. Use the availoabel tools to investigate and remediate production
-Only propose one action at a time when the action is destructive (e.g. restarting a service) - a human will review it
-before it is executed. Before recommending the restart, look up service information. Once the incident is resolved, file a retrospective."""
+system_prompt = """You are an incident commander. Use the available tools to investigate \
+and remediate production incidents. Only propose one action at a time, and be aware that \
+destructive actions (e.g. rebooting an instance) will be reviewed by a human before they \
+execute. Before recommending a reboot, look up the instance's current status. Once the \
+incident is resolved, file a postmortem."""
 # ---------------- Build Model -------------------
 
 def build_model() -> ChatOpenAI:

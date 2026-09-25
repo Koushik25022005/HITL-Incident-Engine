@@ -16,19 +16,18 @@ Run with:
     streamlit run app.py
 """
 import ast
-import uuid
 import sqlite3
+import uuid
 from typing import Any
-from langgraph.checkpoint.sqlite import SqliteSaver # type: ignore
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage # type: ignore
-from langchain_core.runnables.config import RunnableConfig
 
+import streamlit as st  # type: ignore
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage  # type: ignore
+from langchain_core.runnables.config import RunnableConfig
+from langgraph.checkpoint.sqlite import SqliteSaver  # type: ignore
 
 from config.settings import CHECKPOINT_DB_PATH
 from src.graph import build_graph
 from src.nodes import build_model
-
-import streamlit as st # type: ignore
 
 st.set_page_config(page_title="HITL Incident Engine", layout="wide")
 
@@ -61,7 +60,7 @@ if "incident_id" not in st.session_state:
     
     
 def start_new_incident(description: str):
-    thread_id = str(uuid.uuid4());
+    thread_id = str(uuid.uuid4())
     incident_id = f"INC-{thread_id[:8]}"
     st.session_state.thread_id = thread_id
     st.session_state.incident_id = incident_id
@@ -147,25 +146,24 @@ if state.next:
                 pass
             st.rerun()
     
-    with col2:
-        with st.popover("Edit Arguments"):
-            if tool_calls:
-                call = tool_calls[0]
-                new_args_raw = st.text_area(
-                    "Args (Python dict literal)",
-                    value=str(call["args"]),
-                    key=f"edit_{call['id']}"
-                )
+    with col2, st.popover("Edit Arguments"):
+        if tool_calls:
+            call = tool_calls[0]
+            new_args_raw = st.text_area(
+                "Args (Python dict literal)",
+                value=str(call["args"]),
+                key=f"edit_{call['id']}"
+            )
+            
+            if st.button("Save edit and approve"):
+                edited_message = last_message.model_copy(deep=True)
+                edited_message.tool_calls[0]["args"] = ast.literal_eval(new_args_raw)
                 
-                if st.button("Save edit and approve"):
-                    edited_message = last_message.model_copy(deep=True)
-                    edited_message.tool_calls[0]["args"] = ast.literal_eval(new_args_raw)
-                    
-                    
-                    graph.update_state(thread, {"message": [edited_message]})
-                    for _ in graph.stream(None, thread):
-                        pass
-                    st.rerun()
+                
+                graph.update_state(thread, {"message": [edited_message]})
+                for _ in graph.stream(None, thread):
+                    pass
+                st.rerun()
         
     with col3:
             if st.button("Reject"):

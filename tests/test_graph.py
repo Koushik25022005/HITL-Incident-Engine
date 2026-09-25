@@ -18,20 +18,17 @@ and monkeypatched tool make that unnecessary, and CI should stay that
 way — don't replace these with real API calls later.
 """
 
-from unittest.mock import MagicMock
-from typing import Any, cast
+from typing import cast
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import InMemorySaver
-from src.state import AgentState
 
+import src.nodes as node_module
 from src.graph import build_graph
 from src.nodes import exists_action, take_action
-import src.nodes as node_module
-
+from src.state import AgentState
 
 # ---------------------------------------------------------------------------
 # exists_action

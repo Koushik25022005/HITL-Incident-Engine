@@ -1,8 +1,7 @@
-from langgraph.graph import StateGraph, END # type: ignore
+from langgraph.graph import END, StateGraph  # type: ignore
 
+from src.nodes import exists_action, make_call_model, take_action
 from src.state import AgentState
-from src.nodes import make_call_model, exists_action, take_action
-
 
 
 def build_graph(model, checkpointer=None):

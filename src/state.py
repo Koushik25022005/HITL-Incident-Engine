@@ -1,7 +1,8 @@
 from typing import Annotated, TypedDict
 from uuid import uuid4
 
-from langchain_core.messages import AnyMessage # type: ignore
+from langchain_core.messages import AnyMessage  # type: ignore
+
 
 def reduce_messages(left: list[AnyMessage], right: list[AnyMessage]) -> list[AnyMessage]:
     """Merge new messages into existing ones.

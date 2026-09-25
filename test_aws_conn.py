@@ -15,7 +15,7 @@ exist in that region.
 
 import sys
 
-import boto3 # type: ignore
+import boto3  # type: ignore
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -77,7 +77,8 @@ def main():
                     print(f"  {instance['InstanceId']}  state={instance['State']['Name']}  "
                           f"type={instance['InstanceType']}")
             if not found_any:
-                print("  (no instances found in this region — launch one via the AWS Console first)")
+                print("  (no instances found in this region") 
+                print("— launch one via the AWS Console first)")
         except Exception as e:
             print(f"❌ Could not list instances: {e}")
             sys.exit(1)
